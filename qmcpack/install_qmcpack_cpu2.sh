@@ -2,8 +2,8 @@
 
 set -e
 
-target=${target:=gpu}
-prgenv=${prgenv:=llvm}
+target=${target:=cpu}
+prgenv=${prgenv:=gnu}
 version=${version:=3.17.1}
 name=qmcpack
 
@@ -24,21 +24,27 @@ fi
 # Get source from GitHub
 if ! [ -e $prefix/qmcpack ]; then
     cd $prefix
-    git clone https://github.com/QMCPACK/qmcpack.git
+    git clone --branch v3.17.1 https://github.com/QMCPACK/qmcpack.git
+    
 fi
 
 cd $prefix/qmcpack
 #git checkout v${version}
 
 
-module load gpu
+module load $target
 module load PrgEnv-$prgenv
 module load cray-fftw
 module load cray-hdf5-parallel
 module load cmake/3.24.3 #<--because default is old
+module load python
 
-pwd
-ls
+# PrgEnv-nvidia workaround
+
+# module load gcc-mixed
+# makelocalrc $(dirname $(which nvc)) -o -gcc $(which gcc) -gpp $(which g++) > .mynvrc
+
+
 
 build_dir=$prefix/qmcpack/build_$target
 mkdir -p $build_dir
@@ -48,6 +54,7 @@ module list
 pwd
 
 export CC=$(which cc) CXX=$(which CC) FC=$(which ftn)
+
 
 #cmake .. -DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment \
 #    -DCMAKE_INSTALL_PREFIX=$(pwd)/install_dir \
@@ -78,6 +85,15 @@ Compiler=Clang16
 #  source_folder=$1
 #  install_folder=$2
 #fi
+echo "********************************************************************************"
+echo "Target: ${target}"
+echo "PrgEnv: ${prgenv}"
+echo $(cmake --version | head -n 1)
+echo "HDF5_ROOT is ${HDF5_ROOT}"
+echo "CXX = $CXX"
+echo "CC = $CC"
+echo "FC = $FC"
+echo "********************************************************************************"
 
 source_folder=$prefix/qmcpack
 
@@ -89,11 +105,16 @@ else
   exit
 fi
 
-for name in offload_cuda_real_MP offload_cuda_real offload_cuda_cplx_MP offload_cuda_cplx \
-            cpu_real_MP cpu_real cpu_cplx_MP cpu_cplx
+#for name in offload_cuda_real
+for name in cpu_real
 do
 
-CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=$TYPE -DBLAS_LIBRARIES=$CRAY_LIBSCI_LIB"
+CMAKE_FLAGS="-DCMAKE_BUILD_TYPE=$TYPE"
+CMAKE_FLAGS="${CMAKE_FLAGS} -DCMAKE_SYSTEM_NAME=CrayLinuxEnvironment"
+#CMAKE_FLAGS="${CMAKE_FLAGS} -DCMAKE_CXX_FLAGS="--gcc-toolchain=/opt/cray/pe/gcc/11.2.0/snos/""
+#CMAKE_FLAGS="${CMAKE_FLAGS} -DCMAKE_CXX_FLAGS="--gcc-toolchain=$GCC_PATH/snos""
+#CMAKE_FLAGS="${CMAKE_FLAGS} -DHDF5_ROOT=${HDF5_ROOT}"
+#CMAKE_FLAGS="${CMAKE_FLAGS} -DHDF5_DIR=${HDF5_DIR}"
 
 if [[ $name == *"cplx"* ]]; then
   CMAKE_FLAGS="$CMAKE_FLAGS -DQMC_COMPLEX=ON"
@@ -130,7 +151,8 @@ mkdir $folder
 cd $folder
 
 if [ ! -f CMakeCache.txt ] ; then
-cmake $CMAKE_FLAGS -DCMAKE_C_COMPILER=mpicc -DCMAKE_CXX_COMPILER=mpicxx $source_folder
+#cmake $CMAKE_FLAGS -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=CC $source_folder
+cmake $CMAKE_FLAGS $source_folder
 fi
 
 if [[ -v install_folder ]]; then
